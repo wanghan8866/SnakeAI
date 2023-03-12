@@ -2,7 +2,7 @@ from PyQt5 import QtGui, QtCore, QtWidgets
 from PyQt5.QtCore import Qt
 import sys
 from typing import List
-from snake import *
+from snake_env import *
 import numpy as np
 from nn_viz import NeuralNetworkViz
 from neural_network import FeedForwardNetwork, sigmoid, linear, relu
@@ -16,14 +16,17 @@ from math import sqrt
 from decimal import Decimal
 import random
 import csv
-
+from snakes import Snakes
+from time import time
+from Win_counter import WinCounter
 
 SQUARE_SIZE = (35, 35)
 
+t1 = time()
 
 
 class MainWindow(QtWidgets.QMainWindow):
-    def __init__(self, settings, show=True, fps=200):
+    def __init__(self, settings, show=False, fps=200):
         super().__init__()
         self.setAutoFillBackground(True)
         palette = self.palette()
@@ -32,11 +35,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.settings = settings
         self._SBX_eta = self.settings['SBX_eta']
         self._mutation_bins = np.cumsum([self.settings['probability_gaussian'],
-                                        self.settings['probability_random_uniform']
-        ])
+                                         self.settings['probability_random_uniform']
+                                         ])
         self._crossover_bins = np.cumsum([self.settings['probability_SBX'],
-                                         self.settings['probability_SPBX']
-        ])
+                                          self.settings['probability_SPBX']
+                                          ])
         self._SPBX_type = self.settings['SPBX_type'].lower()
         self._mutation_rate = self.settings['mutation_rate']
 
@@ -49,7 +52,6 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             raise Exception('Selection type "{}" is invalid'.format(self.settings['selection_type']))
 
-        
         self.board_size = settings['board_size']
         self.border = (0, 10, 0, 10)  # Left, Top, Right, Bottom
         self.snake_widget_width = SQUARE_SIZE[0] * self.board_size[0]
@@ -63,15 +65,22 @@ class MainWindow(QtWidgets.QMainWindow):
         self.left = 150
         self.width = self._snake_widget_width + 700 + self.border[0] + self.border[2]
         self.height = self._snake_widget_height + self.border[1] + self.border[3] + 200
-        
+
         individuals: List[Individual] = []
 
         for _ in range(self.settings['num_parents']):
-            individual = Snake(self.board_size, hidden_layer_architecture=self.settings['hidden_network_architecture'],
-                              hidden_activation=self.settings['hidden_layer_activation'],
-                              output_activation=self.settings['output_layer_activation'],
-                              lifespan=self.settings['lifespan'],
-                              apple_and_self_vision=self.settings['apple_and_self_vision'])
+            # individual = Snakes(self.board_size, hidden_layer_architecture=self.settings['hidden_network_architecture'],
+            #                   hidden_activation=self.settings['hidden_layer_activation'],
+            #                   output_activation=self.settings['output_layer_activation'],
+            #                   lifespan=self.settings['lifespan'],
+            #                   apple_and_self_vision=self.settings['apple_and_self_vision'])
+            # individual = load_snake("models/test_64", f"snake_1400", settings)
+            individual = Snakes(settings["board_size"],
+                                "models/test_64",
+                                f"snake_1699",
+                                number_rounds=25,
+                                loading=False
+                                )
             individuals.append(individual)
 
         self.best_fitness = 0
@@ -82,12 +91,14 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.snake = self.population.individuals[self._current_individual]
         self.current_generation = 0
+        # self.current_generation = 1699
+        self.init_gen = self.current_generation
 
-        self.init_window()
+        # self.init_window()
 
-        self.timer = QtCore.QTimer(self)
-        self.timer.timeout.connect(self.update)
-        self.timer.start(1000./fps)
+        # self.timer = QtCore.QTimer(self)
+        # self.timer.timeout.connect(self.update)
+        # self.timer.start(1000 // fps)
 
         if show:
             self.show()
@@ -100,35 +111,43 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Create the Neural Network window
         self.nn_viz_window = NeuralNetworkViz(self.centralWidget, self.snake)
-        self.nn_viz_window.setGeometry(QtCore.QRect(0, 0, 600, self._snake_widget_height + self.border[1] + self.border[3] + 200))
+        self.nn_viz_window.setGeometry(
+            QtCore.QRect(0, 0, 600, self._snake_widget_height + self.border[1] + self.border[3] + 200))
         self.nn_viz_window.setObjectName('nn_viz_window')
 
         # Create SnakeWidget window
         self.snake_widget_window = SnakeWidget(self.centralWidget, self.board_size, self.snake)
-        self.snake_widget_window.setGeometry(QtCore.QRect(600 + self.border[0], self.border[1], self.snake_widget_width, self.snake_widget_height))
+        self.snake_widget_window.setGeometry(
+            QtCore.QRect(600 + self.border[0], self.border[1], self.snake_widget_width, self.snake_widget_height))
         self.snake_widget_window.setObjectName('snake_widget_window')
 
         # Genetic Algorithm Stats window
         self.ga_window = GeneticAlgoWidget(self.centralWidget, self.settings)
-        self.ga_window.setGeometry(QtCore.QRect(600, self.border[1] + self.border[3] + self.snake_widget_height, self._snake_widget_width + self.border[0] + self.border[2] + 100, 200-10))
+        self.ga_window.setGeometry(QtCore.QRect(600, self.border[1] + self.border[3] + self.snake_widget_height,
+                                                self._snake_widget_width + self.border[0] + self.border[2] + 100,
+                                                200 - 10))
         self.ga_window.setObjectName('ga_window')
 
-
     def update(self) -> None:
-        self.snake_widget_window.update()
-        self.nn_viz_window.update()
-        # Current individual is alive
+        # self.snake_widget_window.update()
+        # self.nn_viz_window.update()
         if self.snake.is_alive:
+            self.snake.update()
+        # Current individual is alive
+        # print(self.snake.is_alive)
+        if self.snake.is_alive:
+            # print("move here")
             self.snake.move()
+            # print("move after", self._current_individual )
             if self.snake.score > self.best_score:
                 self.best_score = self.snake.score
-                self.ga_window.best_score_label.setText(str(self.snake.score))
+                # self.ga_window.best_score_label.setText(str(self.snake.score))
         # Current individual is dead         
         else:
             # Calculate fitness of current individual
             self.snake.calculate_fitness()
             fitness = self.snake.fitness
-            print(self._current_individual, fitness)
+            # print(self._current_individual, fitness)
 
             # fieldnames = ['frames', 'score', 'fitness']
             # f = os.path.join(os.getcwd(), 'test_del3_1_0_stats.csv')
@@ -149,28 +168,36 @@ class MainWindow(QtWidgets.QMainWindow):
 
             #     writer.writerow(d)
 
-
             if fitness > self.best_fitness:
                 self.best_fitness = fitness
-                self.ga_window.best_fitness_label.setText('{:.2E}'.format(Decimal(fitness)))
+                # self.ga_window.best_fitness_label.setText('{:.2E}'.format(Decimal(fitness)))
 
             self._current_individual += 1
             # Next generation
-            if (self.current_generation > 0 and self._current_individual == self._next_gen_size) or\
-                (self.current_generation == 0 and self._current_individual == settings['num_parents']):
+            if (self.current_generation > 0 and self._current_individual == self._next_gen_size) or \
+                    (self.current_generation == self.init_gen and self._current_individual == settings['num_parents']):
                 print(self.settings)
-                print('======================= Gneration {} ======================='.format(self.current_generation))
+                print('======================= Gneration {} at time {:.2f} ======================='.format(
+                    self.current_generation, time() - t1))
                 print('----Max fitness:', self.population.fittest_individual.fitness)
                 print('----Best Score:', self.population.fittest_individual.score)
                 print('----Average fitness:', self.population.average_fitness)
+                print(f"----Wins: {WinCounter.counter}, {WinCounter.counter / (self.population.fittest_individual.number_rounds * self._next_gen_size)}")
+                WinCounter.counter = 0
+                if self.current_generation % 1 == 0 and self.current_generation > self.init_gen:
+                    save_snake("models/snakes_64", f"snake_{self.current_generation}_{self.population.fittest_individual.score:d}", self.population.fittest_individual,
+                               settings)
+                save_stats(self.population, "models/snakes_64", f"snake_stats")
                 self.next_generation()
             else:
                 current_pop = self.settings['num_parents'] if self.current_generation == 0 else self._next_gen_size
-                self.ga_window.current_individual_label.setText('{}/{}'.format(self._current_individual + 1, current_pop))
+                # self.ga_window.current_individual_label.setText(
+                #     '{}/{}'.format(self._current_individual + 1, current_pop))
 
+            # print(self._current_individual, len(self.population.individuals))
             self.snake = self.population.individuals[self._current_individual]
-            self.snake_widget_window.snake = self.snake
-            self.nn_viz_window.snake = self.snake
+            # self.snake_widget_window.snake = self.snake
+            # self.nn_viz_window.snake = self.snake
 
     def next_generation(self):
         self._increment_generation()
@@ -179,9 +206,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # Calculate fitness of individuals
         for individual in self.population.individuals:
             individual.calculate_fitness()
-        
+
         self.population.individuals = elitism_selection(self.population, self.settings['num_parents'])
-        
+
         random.shuffle(self.population.individuals)
         next_pop: List[Snake] = []
 
@@ -199,18 +226,17 @@ class MainWindow(QtWidgets.QMainWindow):
                 output_activation = individual.output_activation
                 lifespan = individual.lifespan
                 apple_and_self_vision = individual.apple_and_self_vision
-
-                start_pos = individual.start_pos
-                apple_seed = individual.apple_seed
-                starting_direction = individual.starting_direction
+                #
+                # start_pos = individual.start_pos
+                # apple_seed = individual.apple_seed
+                # starting_direction = individual.starting_direction
 
                 # If the individual is still alive, they survive
                 if lifespan > 0:
-                    s = Snake(board_size, chromosome=params, hidden_layer_architecture=hidden_layer_architecture,
-                            hidden_activation=hidden_activation, output_activation=output_activation,
-                            lifespan=lifespan, apple_and_self_vision=apple_and_self_vision)#,
+                    s = Snakes(board_size, chromosome=params, hidden_layer_architecture=hidden_layer_architecture,
+                               hidden_activation=hidden_activation, output_activation=output_activation,
+                               lifespan=lifespan, apple_and_self_vision=apple_and_self_vision)  # ,
                     next_pop.append(s)
-
 
         while len(next_pop) < self._next_gen_size:
             p1, p2 = roulette_wheel_selection(self.population, 2)
@@ -223,7 +249,7 @@ class MainWindow(QtWidgets.QMainWindow):
             # Because of this I need to perform crossover/mutation on each chromosome between parents
             for l in range(1, L):
                 p1_W_l = p1.network.params['W' + str(l)]
-                p2_W_l = p2.network.params['W' + str(l)]  
+                p2_W_l = p2.network.params['W' + str(l)]
                 p1_b_l = p1.network.params['b' + str(l)]
                 p2_b_l = p2.network.params['b' + str(l)]
 
@@ -248,27 +274,28 @@ class MainWindow(QtWidgets.QMainWindow):
                 np.clip(c2_params['b' + str(l)], -1, 1, out=c2_params['b' + str(l)])
 
             # Create children from chromosomes generated above
-            c1 = Snake(p1.board_size, chromosome=c1_params, hidden_layer_architecture=p1.hidden_layer_architecture,
-                       hidden_activation=p1.hidden_activation, output_activation=p1.output_activation,
-                       lifespan=self.settings['lifespan'])
-            c2 = Snake(p2.board_size, chromosome=c2_params, hidden_layer_architecture=p2.hidden_layer_architecture,
-                       hidden_activation=p2.hidden_activation, output_activation=p2.output_activation,
-                       lifespan=self.settings['lifespan'])
+            c1 = Snakes(p1.board_size, chromosome=c1_params, hidden_layer_architecture=p1.hidden_layer_architecture,
+                        hidden_activation=p1.hidden_activation, output_activation=p1.output_activation,
+                        lifespan=self.settings['lifespan'])
+            c2 = Snakes(p2.board_size, chromosome=c2_params, hidden_layer_architecture=p2.hidden_layer_architecture,
+                        hidden_activation=p2.hidden_activation, output_activation=p2.output_activation,
+                        lifespan=self.settings['lifespan'])
 
             # Add children to the next generation
             next_pop.extend([c1, c2])
-        
+
         # Set the next generation
         random.shuffle(next_pop)
         self.population.individuals = next_pop
 
     def _increment_generation(self):
         self.current_generation += 1
-        self.ga_window.current_generation_label.setText(str(self.current_generation + 1))
+        # self.ga_window.current_generation_label.setText(str(self.current_generation + 1))
         # self.ga_window.current_generation_label.setText("<font color='red'>" + str(self.loaded[self.current_generation]) + "</font>")
 
     def _crossover(self, parent1_weights: np.ndarray, parent2_weights: np.ndarray,
-                   parent1_bias: np.ndarray, parent2_bias: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+                   parent1_bias: np.ndarray, parent2_bias: np.ndarray) -> Tuple[
+        np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         rand_crossover = random.random()
         crossover_bucket = np.digitize(rand_crossover, self._crossover_bins)
         child1_weights, child2_weights = None, None
@@ -277,13 +304,14 @@ class MainWindow(QtWidgets.QMainWindow):
         # SBX
         if crossover_bucket == 0:
             child1_weights, child2_weights = SBX(parent1_weights, parent2_weights, self._SBX_eta)
-            child1_bias, child2_bias =  SBX(parent1_bias, parent2_bias, self._SBX_eta)
+            child1_bias, child2_bias = SBX(parent1_bias, parent2_bias, self._SBX_eta)
 
         # Single point binary crossover (SPBX)
         elif crossover_bucket == 1:
-            child1_weights, child2_weights = single_point_binary_crossover(parent1_weights, parent2_weights, major=self._SPBX_type)
-            child1_bias, child2_bias =  single_point_binary_crossover(parent1_bias, parent2_bias, major=self._SPBX_type)
-        
+            child1_weights, child2_weights = single_point_binary_crossover(parent1_weights, parent2_weights,
+                                                                           major=self._SPBX_type)
+            child1_bias, child2_bias = single_point_binary_crossover(parent1_bias, parent2_bias, major=self._SPBX_type)
+
         else:
             raise Exception('Unable to determine valid crossover based off probabilities')
 
@@ -308,7 +336,7 @@ class MainWindow(QtWidgets.QMainWindow):
             # Mutate bias
             gaussian_mutation(child1_bias, mutation_rate, scale=scale)
             gaussian_mutation(child2_bias, mutation_rate, scale=scale)
-        
+
         # Uniform random
         elif mutation_bucket == 1:
             # Mutate weights
@@ -379,7 +407,7 @@ class GeneticAlgoWidget(QtWidgets.QWidget):
         # Crossover type
         prob_SBX = settings['probability_SBX']
         prob_SPBX = settings['probability_SPBX']
-        crossover_type = '{:.0f}% SBX\n{:.0f}% SPBX'.format(prob_SBX*100, prob_SPBX*100)
+        crossover_type = '{:.0f}% SBX\n{:.0f}% SPBX'.format(prob_SBX * 100, prob_SPBX * 100)
         self._create_label_widget_in_grid('Crossover Type: ', font_bold, grid, ROW, LABEL_COL, TOP_LEFT)
         self._create_label_widget_in_grid(crossover_type, font, grid, ROW, STATS_COL, TOP_LEFT)
         ROW += 1
@@ -387,7 +415,7 @@ class GeneticAlgoWidget(QtWidgets.QWidget):
         # Mutation type
         prob_gaussian = settings['probability_gaussian']
         prob_uniform = settings['probability_random_uniform']
-        mutation_type = '{:.0f}% Gaussian\t\n{:.0f}% Uniform'.format(prob_gaussian*100, prob_uniform*100)
+        mutation_type = '{:.0f}% Gaussian\t\n{:.0f}% Uniform'.format(prob_gaussian * 100, prob_uniform * 100)
         self._create_label_widget_in_grid('Mutation Type: ', font_bold, grid, ROW, LABEL_COL, TOP_LEFT)
         self._create_label_widget_in_grid(mutation_type, font, grid, ROW, STATS_COL, TOP_LEFT)
         ROW += 1
@@ -413,20 +441,23 @@ class GeneticAlgoWidget(QtWidgets.QWidget):
         ROW += 1
 
         # Hidden layer activation
-        hidden_layer_activation = ' '.join([word.lower().capitalize() for word in settings['hidden_layer_activation'].split('_')])
+        hidden_layer_activation = ' '.join(
+            [word.lower().capitalize() for word in settings['hidden_layer_activation'].split('_')])
         self._create_label_widget_in_grid('Hidden Activation: ', font_bold, grid, ROW, LABEL_COL, TOP_LEFT)
         self._create_label_widget_in_grid(hidden_layer_activation, font, grid, ROW, STATS_COL, TOP_LEFT)
         ROW += 1
 
         # Output layer activation
-        output_layer_activation = ' '.join([word.lower().capitalize() for word in settings['output_layer_activation'].split('_')])
+        output_layer_activation = ' '.join(
+            [word.lower().capitalize() for word in settings['output_layer_activation'].split('_')])
         self._create_label_widget_in_grid('Output Activation: ', font_bold, grid, ROW, LABEL_COL, TOP_LEFT)
         self._create_label_widget_in_grid(output_layer_activation, font, grid, ROW, STATS_COL, TOP_LEFT)
         ROW += 1
 
         # Network architecture
         network_architecture = '[{}, {}, 4]'.format(settings['vision_type'] * 3 + 4 + 4,
-                                                    ', '.join([str(num_neurons) for num_neurons in settings['hidden_network_architecture']]))
+                                                    ', '.join([str(num_neurons) for num_neurons in
+                                                               settings['hidden_network_architecture']]))
         self._create_label_widget_in_grid('NN Architecture: ', font_bold, grid, ROW, LABEL_COL, TOP_LEFT)
         self._create_label_widget_in_grid(network_architecture, font, grid, ROW, STATS_COL, TOP_LEFT)
         ROW += 1
@@ -443,7 +474,6 @@ class GeneticAlgoWidget(QtWidgets.QWidget):
         self._create_label_widget_in_grid(apple_self_vision_type, font, grid, ROW, STATS_COL, TOP_LEFT)
         ROW += 1
 
-
         grid.setSpacing(0)
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setColumnStretch(1, 1)
@@ -451,23 +481,23 @@ class GeneticAlgoWidget(QtWidgets.QWidget):
         grid.setColumnStretch(5, 2)
 
         self.setLayout(grid)
-        
+
         self.show()
 
     def _create_label_widget(self, string_label: str, font: QtGui.QFont) -> QtWidgets.QLabel:
         label = QtWidgets.QLabel()
         label.setText(string_label)
         label.setFont(font)
-        label.setContentsMargins(0,0,0,0)
+        label.setContentsMargins(0, 0, 0, 0)
         return label
 
-    def _create_label_widget_in_grid(self, string_label: str, font: QtGui.QFont, 
-                                     grid: QtWidgets.QGridLayout, row: int, col: int, 
+    def _create_label_widget_in_grid(self, string_label: str, font: QtGui.QFont,
+                                     grid: QtWidgets.QGridLayout, row: int, col: int,
                                      alignment: Qt.Alignment) -> None:
         label = QtWidgets.QLabel()
         label.setText(string_label)
         label.setFont(font)
-        label.setContentsMargins(0,0,0,0)
+        label.setContentsMargins(0, 0, 0, 0)
         grid.addWidget(label, row, col, alignment)
 
 
@@ -481,12 +511,12 @@ class SnakeWidget(QtWidgets.QWidget):
             self.snake = snake
         self.setFocus()
 
-        self.draw_vision = True
+        self.draw_vision = False
         self.show()
 
     def new_game(self) -> None:
-        self.snake = Snake(self.board_size)
-    
+        self.snake = Snakes(self.board_size)
+
     def update(self):
         if self.snake.is_alive:
             self.snake.update()
@@ -518,38 +548,43 @@ class SnakeWidget(QtWidgets.QWidget):
         brush = QtGui.QBrush()
         brush.setColor(Qt.red)
         painter.setBrush(QtGui.QBrush(QtGui.QColor(198, 5, 20)))
+
         # painter.setBrush(brush)
 
-        def _draw_line_to_apple(painter: QtGui.QPainter, start_x: int, start_y: int, drawable_vision: DrawableVision) -> Tuple[int, int]:
+        def _draw_line_to_apple(painter: QtGui.QPainter, start_x: int, start_y: int, drawable_vision: DrawableVision) -> \
+                Tuple[int, int]:
             painter.setPen(QtGui.QPen(Qt.green))
-            end_x = drawable_vision.apple_location.x * SQUARE_SIZE[0] + SQUARE_SIZE[0]/2
-            end_y = drawable_vision.apple_location.y * SQUARE_SIZE[1] + SQUARE_SIZE[1]/2
+            end_x = drawable_vision.apple_location.x * SQUARE_SIZE[0] + SQUARE_SIZE[0] / 2
+            end_y = drawable_vision.apple_location.y * SQUARE_SIZE[1] + SQUARE_SIZE[1] / 2
             painter.drawLine(start_x, start_y, end_x, end_y)
             return end_x, end_y
 
-        def _draw_line_to_self(painter: QtGui.QPainter, start_x: int, start_y: int, drawable_vision: DrawableVision) -> Tuple[int, int]:
+        def _draw_line_to_self(painter: QtGui.QPainter, start_x: int, start_y: int, drawable_vision: DrawableVision) -> \
+                Tuple[int, int]:
             painter.setPen(QtGui.QPen(Qt.red))
-            end_x = drawable_vision.self_location.x * SQUARE_SIZE[0] + SQUARE_SIZE[0]/2
-            end_y = drawable_vision.self_location.y * SQUARE_SIZE[1] + SQUARE_SIZE[1]/2
+            end_x = drawable_vision.self_location.x * SQUARE_SIZE[0] + SQUARE_SIZE[0] / 2
+            end_y = drawable_vision.self_location.y * SQUARE_SIZE[1] + SQUARE_SIZE[1] / 2
             painter.drawLine(start_x, start_y, end_x, end_y)
             return end_x, end_y
 
         for point in self.snake.snake_array:
             painter.drawRect(point.x * SQUARE_SIZE[0],  # Upper left x-coord
                              point.y * SQUARE_SIZE[1],  # Upper left y-coord
-                             SQUARE_SIZE[0],            # Width
-                             SQUARE_SIZE[1])            # Height
+                             SQUARE_SIZE[0],  # Width
+                             SQUARE_SIZE[1])  # Height
 
         if self.draw_vision:
             start = self.snake.snake_array[0]
 
             if self.snake._drawable_vision[0]:
                 for drawable_vision in self.snake._drawable_vision:
-                    start_x = start.x * SQUARE_SIZE[0] + SQUARE_SIZE[0]/2
-                    start_y = start.y * SQUARE_SIZE[1] + SQUARE_SIZE[1]/2
+                    start_x = start.x * SQUARE_SIZE[0] + SQUARE_SIZE[0] / 2
+                    start_y = start.y * SQUARE_SIZE[1] + SQUARE_SIZE[1] / 2
                     if drawable_vision.apple_location and drawable_vision.self_location:
-                        apple_dist = self._calc_distance(start.x, drawable_vision.apple_location.x, start.y, drawable_vision.apple_location.y)
-                        self_dist = self._calc_distance(start.x, drawable_vision.self_location.x, start.y, drawable_vision.self_location.y)
+                        apple_dist = self._calc_distance(start.x, drawable_vision.apple_location.x, start.y,
+                                                         drawable_vision.apple_location.y)
+                        self_dist = self._calc_distance(start.x, drawable_vision.self_location.x, start.y,
+                                                        drawable_vision.self_location.y)
                         if apple_dist <= self_dist:
                             start_x, start_y = _draw_line_to_apple(painter, start_x, start_y, drawable_vision)
                             start_x, start_y = _draw_line_to_self(painter, start_x, start_y, drawable_vision)
@@ -562,13 +597,12 @@ class SnakeWidget(QtWidgets.QWidget):
 
                     elif drawable_vision.self_location:
                         start_x, start_y = _draw_line_to_self(painter, start_x, start_y, drawable_vision)
-                        
+
                     if drawable_vision.wall_location:
                         painter.setPen(QtGui.QPen(Qt.black))
-                        end_x = drawable_vision.wall_location.x * SQUARE_SIZE[0] + SQUARE_SIZE[0]/2
-                        end_y = drawable_vision.wall_location.y * SQUARE_SIZE[1] + SQUARE_SIZE[1]/2 
+                        end_x = drawable_vision.wall_location.x * SQUARE_SIZE[0] + SQUARE_SIZE[0] / 2
+                        end_y = drawable_vision.wall_location.y * SQUARE_SIZE[1] + SQUARE_SIZE[1] / 2
                         painter.drawLine(start_x, start_y, end_x, end_y)
-
 
     def draw_apple(self, painter: QtGui.QPainter) -> None:
         apple_location = self.snake.apple_location
@@ -589,7 +623,7 @@ class SnakeWidget(QtWidgets.QWidget):
         self.draw_border(painter)
         self.draw_apple(painter)
         self.draw_snake(painter)
-        
+
         painter.end()
 
     def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
@@ -604,12 +638,11 @@ class SnakeWidget(QtWidgets.QWidget):
         #     self.snake.direction = 'l'
 
     def _calc_distance(self, x1, x2, y1, y2) -> float:
-        diff_x = float(abs(x2-x1))
-        diff_y = float(abs(y2-y1))
+        diff_x = float(abs(x2 - x1))
+        diff_y = float(abs(y2 - y1))
         dist = ((diff_x * diff_x) + (diff_y * diff_y)) ** 0.5
         return dist
 
-        
 
 def _calc_stats(data: List[Union[int, float]]) -> Tuple[float, float, float, float, float]:
     mean = np.mean(data)
@@ -620,15 +653,17 @@ def _calc_stats(data: List[Union[int, float]]) -> Tuple[float, float, float, flo
 
     return (mean, median, std, _min, _max)
 
+
 def save_stats(population: Population, path_to_dir: str, fname: str):
     if not os.path.exists(path_to_dir):
         os.makedirs(path_to_dir)
 
     f = os.path.join(path_to_dir, fname + '.csv')
-    
+
     frames = [individual._frames for individual in population.individuals]
     apples = [individual.score for individual in population.individuals]
     fitness = [individual.fitness for individual in population.individuals]
+    # steps_history = [individual.steps_history for individual in population.individuals][np.argmax(apples)]
 
     write_header = True
     if os.path.exists(f):
@@ -639,7 +674,7 @@ def save_stats(population: Population, path_to_dir: str, fname: str):
                 ('fitness', fitness)
                 ]
     stats = ['mean', 'median', 'std', 'min', 'max']
-
+    # +[f"steps_{i}" for i in range(len(steps_history))]
     header = [t[0] + '_' + s for t in trackers for s in stats]
 
     with open(f, 'a') as csvfile:
@@ -654,9 +689,13 @@ def save_stats(population: Population, path_to_dir: str, fname: str):
             for curr_stat, stat_name in zip(curr_stats, stats):
                 entry_name = '{}_{}'.format(tracker_name, stat_name)
                 row[entry_name] = curr_stat
+        # for i in range(len(steps_history)):
+        #     entry_name=f"steps_{i}"
+        #     row[entry_name] = steps_history[i]
 
         # Write row
         writer.writerow(row)
+
 
 def load_stats(path_to_stats: str, normalize: Optional[bool] = True):
     data = {}
@@ -673,11 +712,11 @@ def load_stats(path_to_stats: str, normalize: Optional[bool] = True):
         trackers_stats = [f.split('_') for f in fieldnames]
         trackers = set(ts[0] for ts in trackers_stats)
         stats_names = set(ts[1] for ts in trackers_stats)
-        
+
         for tracker, stat_name in trackers_stats:
             if tracker not in data:
                 data[tracker] = {}
-            
+
             if stat_name not in data[tracker]:
                 data[tracker][stat_name] = []
 
@@ -686,7 +725,7 @@ def load_stats(path_to_stats: str, normalize: Optional[bool] = True):
                 for stat_name in stats_names:
                     value = float(line['{}_{}'.format(tracker, stat_name)])
                     data[tracker][stat_name].append(value)
-        
+
     if normalize:
         factors = {}
         for tracker in trackers:
@@ -710,8 +749,9 @@ def load_stats(path_to_stats: str, normalize: Optional[bool] = True):
     return data
 
 
-
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     window = MainWindow(settings)
+    while True:
+        window.update()
     sys.exit(app.exec_())

@@ -7,9 +7,9 @@ import sys
 import os
 import json
 
-from misc import *
-from genetic_algorithm.individual import Individual
-from neural_network import FeedForwardNetwork, linear, sigmoid, tanh, relu, leaky_relu, ActivationFunction, get_activation_by_name
+from snake_game_gen.misc import *
+from snake_game_gen.genetic_algorithm.individual import Individual
+from snake_game_gen.neural_network import FeedForwardNetwork, linear, sigmoid, tanh, relu, leaky_relu, ActivationFunction, get_activation_by_name
 
 
 
@@ -78,7 +78,7 @@ class Snake(Individual):
         self._vision_type = VISION_8
         self._vision: List[Vision] = [None] * len(self._vision_type)
         # This is just used so I can draw and is not actually used in the NN
-        self._drawable_vision: List[DrawableVision] = [None] * len(self._vision_type)
+        # self._drawable_vision: List[DrawableVision] = [None] * len(self._vision_type)
 
         # Setting up network architecture
         # Each "Vision" has 3 distances it tracks: wall, apple and self
@@ -165,7 +165,7 @@ class Snake(Individual):
         for i, slope in enumerate(self._vision_type):
             vision, drawable_vision = self.look_in_direction(slope)
             self._vision[i] = vision
-            self._drawable_vision[i] = drawable_vision
+            # self._drawable_vision[i] = drawable_vision
         
         # Update the input array
         self._vision_as_input_array()
@@ -221,7 +221,8 @@ class Snake(Individual):
             dist_to_self = 1.0 / dist_to_self
 
         vision = Vision(dist_to_wall, dist_to_apple, dist_to_self)
-        drawable_vision = DrawableVision(wall_location, apple_location, self_location)
+        # drawable_vision = DrawableVision(wall_location, apple_location, self_location)
+        drawable_vision = None
         return (vision, drawable_vision)
 
     def _vision_as_input_array(self) -> None:
@@ -410,6 +411,7 @@ class Snake(Individual):
         self.tail_direction = self.direction
 
 def save_snake(population_folder: str, individual_name: str, snake: Snake, settings: Dict[str, Any]) -> None:
+    print("...Save...")
     # Make population folder if it doesn't exist
     if not os.path.exists(population_folder):
         os.makedirs(population_folder)

@@ -48,7 +48,12 @@ class FeedForwardNetwork(object):
         for l in range(1, L):
             W = self.params['W' + str(l)]
             b = self.params['b' + str(l)]
+            # print(W.shape)
+            # print(b.shape)
+            # print(A_prev.shape)
+            # print()
             Z = np.dot(W, A_prev) + b
+            # print("hidden")
             A_prev = self.hidden_activation(Z)
             self.params['A' + str(l)] = A_prev
 
@@ -56,6 +61,7 @@ class FeedForwardNetwork(object):
         W = self.params['W' + str(L)]
         b = self.params['b' + str(L)]
         Z = np.dot(W, A_prev) + b
+        # print("output")
         out = self.output_activation(Z)
         self.params['A' + str(L)] = out
 

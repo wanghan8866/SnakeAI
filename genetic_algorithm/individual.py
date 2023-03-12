@@ -7,6 +7,9 @@ class Individual(object):
         pass
 
     @abstractmethod
+    def get_result(self):
+        raise Exception('get_result function must be defined')
+    @abstractmethod
     def calculate_fitness(self):
         raise Exception('calculate_fitness function must be defined')
 
